@@ -5,6 +5,7 @@ import { Plus } from "lucide-react";
 import { useGraph } from "../../lib/graph";
 import { unwrap } from "../../lib/unwrap";
 import { queryKeys } from "../../lib/query";
+import { useDocumentTitle } from "../../lib/use-document-title";
 import { useGraphSimulation, type SimNode, type SimLink } from "./use-graph-simulation";
 import { LinkPicker } from "../../features/link-picker/link-picker";
 import { SearchPalette } from "../../features/search-palette/search-palette";
@@ -37,6 +38,8 @@ export const GraphView = () => {
   const [deleteNodeId, setDeleteNodeId] = useState<string | null>(null);
   const [dragNode, setDragNode] = useState<string | null>(null);
   const [searchPaletteOpen, setSearchPaletteOpen] = useState(false);
+
+  useDocumentTitle(null);
 
   // Keyboard shortcut: Cmd+K / Ctrl+K opens the search palette
   useEffect(() => {

@@ -6,6 +6,7 @@ import { validateTitle as validateTitleCore } from "core";
 import { useGraph } from "../../lib/graph";
 import { unwrap } from "../../lib/unwrap";
 import { queryKeys } from "../../lib/query";
+import { useDocumentTitle } from "../../lib/use-document-title";
 import { MilkdownEditor } from "./milkdown-editor";
 
 const ERROR_MESSAGES: Record<string, string> = {
@@ -109,6 +110,11 @@ export const EditorPanel = () => {
   const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const inFlightSavesRef = useRef(0);
+
+  // Reflect the note name in the browser tab. Fall back to a placeholder so an
+  // empty title (e.g. a brand-new note) still beats the bare app name.
+  const trimmedTitle = title.trim();
+  useDocumentTitle(trimmedTitle === "" ? (isNew ? "新しいノート" : null) : trimmedTitle);
 
   // Load existing note
   const { data: note } = useQuery({
