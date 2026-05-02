@@ -136,6 +136,16 @@ export const GraphView = () => {
     setDeleteNodeId(null);
   };
 
+  // Resolve the title of the node currently targeted for deletion so the
+  // confirmation dialog can name it explicitly. Falls back to "このノート"
+  // when the node is missing a label (untitled drafts, race conditions).
+  const deleteTargetLabel = (() => {
+    if (!deleteNodeId) return null;
+    const node = nodes.find((n) => n.id === deleteNodeId);
+    const label = node?.label?.trim();
+    return label && label.length > 0 ? label : null;
+  })();
+
   const handleDeleteLink = (edgeId: string) => {
     deleteLinkMutation.mutate(edgeId);
     setContextMenu(null);
@@ -485,7 +495,14 @@ export const GraphView = () => {
           <AlertDialogHeader>
             <AlertDialogTitle>ノートを削除</AlertDialogTitle>
             <AlertDialogDescription>
-              このノートを削除しますか？この操作は取り消せません。
+              {deleteTargetLabel ? (
+                <>
+                  「<span className="font-medium text-foreground">{deleteTargetLabel}</span>
+                  」を削除しますか？この操作は取り消せません。
+                </>
+              ) : (
+                <>このノートを削除しますか？この操作は取り消せません。</>
+              )}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

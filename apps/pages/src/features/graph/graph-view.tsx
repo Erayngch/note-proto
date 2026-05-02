@@ -5,6 +5,7 @@ import { Plus } from "lucide-react";
 import { useGraph } from "../../lib/graph";
 import { unwrap } from "../../lib/unwrap";
 import { queryKeys } from "../../lib/query";
+import { useDocumentTitle } from "../../lib/use-document-title";
 import { useGraphSimulation, type SimNode, type SimLink } from "./use-graph-simulation";
 import { LinkPicker } from "../../features/link-picker/link-picker";
 import { SearchPalette } from "../../features/search-palette/search-palette";
@@ -37,6 +38,8 @@ export const GraphView = () => {
   const [deleteNodeId, setDeleteNodeId] = useState<string | null>(null);
   const [dragNode, setDragNode] = useState<string | null>(null);
   const [searchPaletteOpen, setSearchPaletteOpen] = useState(false);
+
+  useDocumentTitle(null);
 
   // Keyboard shortcut: Cmd+K / Ctrl+K opens the search palette
   useEffect(() => {
@@ -182,6 +185,16 @@ export const GraphView = () => {
     }
     setDeleteNodeId(null);
   };
+
+  // Resolve the title of the node currently targeted for deletion so the
+  // confirmation dialog can name it explicitly. Falls back to "このノート"
+  // when the node is missing a label (untitled drafts, race conditions).
+  const deleteTargetLabel = (() => {
+    if (!deleteNodeId) return null;
+    const node = nodes.find((n) => n.id === deleteNodeId);
+    const label = node?.label?.trim();
+    return label && label.length > 0 ? label : null;
+  })();
 
   const handleDeleteLink = (edgeId: string) => {
     deleteLinkMutation.mutate(edgeId);
@@ -415,7 +428,14 @@ export const GraphView = () => {
           <AlertDialogHeader>
             <AlertDialogTitle>ノートを削除</AlertDialogTitle>
             <AlertDialogDescription>
-              このノートを削除しますか？この操作は取り消せません。
+              {deleteTargetLabel ? (
+                <>
+                  「<span className="font-medium text-foreground">{deleteTargetLabel}</span>
+                  」を削除しますか？この操作は取り消せません。
+                </>
+              ) : (
+                <>このノートを削除しますか？この操作は取り消せません。</>
+              )}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
