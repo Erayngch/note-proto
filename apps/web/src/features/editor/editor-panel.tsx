@@ -42,6 +42,7 @@ export const EditorPanel = () => {
   const [content, setContent] = useState("");
   const [titleError, setTitleError] = useState<string | null>(null);
   const [initialized, setInitialized] = useState(false);
+  const [discardDialogOpen, setDiscardDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -120,7 +121,13 @@ export const EditorPanel = () => {
   const handleTitleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
     setTitle(value);
-    setTitleError(validateTitle(value));
+    // For new notes, only surface the "required" error once the user actually
+    // typed something — we don't want to scold them on the empty initial state.
+    if (isNew && value === "") {
+      setTitleError(null);
+    } else {
+      setTitleError(validateTitle(value));
+    }
   };
 
   const handleTitleBlur = () => {
@@ -135,6 +142,12 @@ export const EditorPanel = () => {
   const handleContentChange = useCallback(
     (markdown: string) => {
       setContent(markdown);
+      // For a new note, surface the title-required hint as soon as the user
+      // starts typing the body without a title — so they don't first hit it
+      // when pressing the back button.
+      if (isNew && markdown !== "" && title === "") {
+        setTitleError("タイトルは必須です");
+      }
       // Auto-save with debounce for existing notes
       if (!isNew && id) {
         if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
@@ -143,7 +156,7 @@ export const EditorPanel = () => {
         }, 500);
       }
     },
-    [isNew, id, saveContentMutation],
+    [isNew, id, title, saveContentMutation],
   );
 
   const handleBack = async () => {
@@ -153,9 +166,11 @@ export const EditorPanel = () => {
         void navigate("/");
         return;
       }
-      // New note: empty title + has content → error
+      // New note: empty title + has content → offer a discard escape hatch
+      // instead of just blocking the user with an error.
       if (title === "") {
         setTitleError("タイトルは必須です");
+        setDiscardDialogOpen(true);
         return;
       }
       // New note: valid title → save and go back
@@ -184,6 +199,11 @@ export const EditorPanel = () => {
       }
       void navigate("/");
     }
+  };
+
+  const confirmDiscard = () => {
+    setDiscardDialogOpen(false);
+    void navigate("/");
   };
 
   const handleConfirmDelete = async () => {
@@ -257,10 +277,19 @@ export const EditorPanel = () => {
             value={title}
             onChange={handleTitleChange}
             onBlur={handleTitleBlur}
-            placeholder="タイトル"
+            placeholder="タイトル（必須）"
+            aria-label="タイトル（必須）"
+            aria-required="true"
+            aria-invalid={titleError ? "true" : undefined}
             className="w-full text-3xl font-bold bg-transparent outline-none border-none"
           />
-          {titleError && <p className="text-sm text-destructive mt-1">{titleError}</p>}
+          {titleError ? (
+            <p className="text-sm text-destructive mt-1" role="alert">
+              {titleError}
+            </p>
+          ) : (
+            <p className="text-xs text-muted-foreground mt-1">タイトルは必須です</p>
+          )}
         </div>
         {(isNew || initialized) && (
           <MilkdownEditor key={id ?? "new"} defaultValue={content} onChange={handleContentChange} />
@@ -285,6 +314,28 @@ export const EditorPanel = () => {
           </section>
         )}
       </div>
+
+      <AlertDialog
+        open={discardDialogOpen}
+        onOpenChange={(open) => {
+          if (!open) setDiscardDialogOpen(false);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>タイトルが未入力です</AlertDialogTitle>
+            <AlertDialogDescription>
+              タイトルを入力していないため保存できません。編集中の内容を破棄して戻りますか？
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>編集を続ける</AlertDialogCancel>
+            <AlertDialogAction variant="destructive" onClick={confirmDiscard}>
+              破棄して戻る
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
         <AlertDialogContent>
