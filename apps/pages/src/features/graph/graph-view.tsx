@@ -1,7 +1,7 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router";
-import { Plus } from "lucide-react";
+import { Plus, ZoomIn, ZoomOut, Maximize2, X } from "lucide-react";
 import { useGraph } from "../../lib/graph";
 import { unwrap } from "../../lib/unwrap";
 import { queryKeys } from "../../lib/query";
@@ -19,6 +19,11 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "../../ui/alert-dialog";
+
+const CANVAS_HINT_STORAGE_KEY = "graph-canvas-hint-dismissed";
+const ZOOM_MIN = 0.1;
+const ZOOM_MAX = 5;
+const ZOOM_STEP = 1.2;
 
 type ContextMenu = {
   x: number;
@@ -57,6 +62,24 @@ export const GraphView = () => {
   const [transform, setTransform] = useState({ x: 0, y: 0, scale: 1 });
   const isPanning = useRef(false);
   const panStart = useRef({ x: 0, y: 0 });
+
+  // First-visit hint overlay (dismissible, persisted in localStorage)
+  const [hintDismissed, setHintDismissed] = useState(() => {
+    if (typeof window === "undefined") return true;
+    try {
+      return window.localStorage.getItem(CANVAS_HINT_STORAGE_KEY) === "1";
+    } catch {
+      return false;
+    }
+  });
+  const dismissHint = useCallback(() => {
+    setHintDismissed(true);
+    try {
+      window.localStorage.setItem(CANVAS_HINT_STORAGE_KEY, "1");
+    } catch {
+      // ignore storage errors (private mode, quota, etc.)
+    }
+  }, []);
 
   const onTick = useCallback((newNodes: SimNode[], newLinks: SimLink[]) => {
     setNodes(newNodes);
@@ -232,6 +255,38 @@ export const GraphView = () => {
     svg.addEventListener("wheel", handleWheel, { passive: false });
     return () => svg.removeEventListener("wheel", handleWheel);
   }, [handleWheel]);
+
+  const zoomAroundCenter = useCallback((factor: number) => {
+    const svgRect = svgRef.current?.getBoundingClientRect();
+    if (!svgRect) return;
+    const cx = svgRect.width / 2;
+    const cy = svgRect.height / 2;
+    // Manual zoom should also stop any pending auto-fit.
+    fitRequestedRef.current = false;
+    setTransform((prev) => {
+      const newScale = Math.min(Math.max(prev.scale * factor, ZOOM_MIN), ZOOM_MAX);
+      const ratio = newScale / prev.scale;
+      return {
+        scale: newScale,
+        x: cx - (cx - prev.x) * ratio,
+        y: cy - (cy - prev.y) * ratio,
+      };
+    });
+  }, []);
+
+  const handleZoomIn = useCallback(() => zoomAroundCenter(ZOOM_STEP), [zoomAroundCenter]);
+  const handleZoomOut = useCallback(() => zoomAroundCenter(1 / ZOOM_STEP), [zoomAroundCenter]);
+
+  const handleFitView = useCallback(() => {
+    // User explicitly asked to fit; consume any pending auto-fit and apply now.
+    fitRequestedRef.current = false;
+    const next = computeFitTransform(nodesRef.current);
+    if (next) {
+      setTransform(next);
+    } else {
+      setTransform({ x: 0, y: 0, scale: 1 });
+    }
+  }, [computeFitTransform, nodesRef]);
 
   const handleMouseDown = (e: React.MouseEvent) => {
     if (e.button === 0 && (e.target as SVGElement).tagName === "svg") {
@@ -412,6 +467,66 @@ export const GraphView = () => {
 
         {/* Search Palette (Cmd+K / Ctrl+K) */}
         {searchPaletteOpen && <SearchPalette onClose={() => setSearchPaletteOpen(false)} />}
+
+        {/* Zoom / Fit-to-view controls */}
+        <div
+          className="absolute bottom-6 left-6 z-40 flex flex-col rounded-md border border-border bg-popover shadow-md"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <button
+            type="button"
+            aria-label="拡大"
+            title="拡大"
+            className="flex h-9 w-9 items-center justify-center border-b border-border text-foreground hover:bg-accent"
+            onClick={handleZoomIn}
+          >
+            <ZoomIn size={16} />
+          </button>
+          <button
+            type="button"
+            aria-label="縮小"
+            title="縮小"
+            className="flex h-9 w-9 items-center justify-center border-b border-border text-foreground hover:bg-accent"
+            onClick={handleZoomOut}
+          >
+            <ZoomOut size={16} />
+          </button>
+          <button
+            type="button"
+            aria-label="全体表示"
+            title="全体表示"
+            className="flex h-9 w-9 items-center justify-center text-foreground hover:bg-accent"
+            onClick={handleFitView}
+          >
+            <Maximize2 size={16} />
+          </button>
+        </div>
+
+        {/* First-visit canvas hint */}
+        {!hintDismissed && (
+          <div
+            className="absolute left-1/2 top-6 z-40 flex max-w-[min(92vw,520px)] -translate-x-1/2 items-start gap-3 rounded-md border border-border bg-popover px-4 py-3 text-sm text-foreground shadow-md"
+            role="status"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex-1 space-y-1">
+              <p className="font-medium">キャンバスの操作</p>
+              <ul className="list-disc space-y-0.5 pl-4 text-muted-foreground">
+                <li>ドラッグで移動 / ホイールでズーム</li>
+                <li>ノードを右クリックでメニュー（リンク追加・削除）</li>
+                <li>左下ボタンで拡大・縮小・全体表示</li>
+              </ul>
+            </div>
+            <button
+              type="button"
+              aria-label="ヒントを閉じる"
+              className="rounded-sm p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
+              onClick={dismissHint}
+            >
+              <X size={14} />
+            </button>
+          </div>
+        )}
       </div>
 
       {/* FAB - New Note Button */}
