@@ -2,6 +2,7 @@ export type {
   Note,
   NoteWithContent,
   Link,
+  LinkDirection,
   GraphNode,
   GraphEdge,
   GraphData,

@@ -9,10 +9,13 @@ export type NoteWithContent = Note & {
   content: string;
 };
 
+export type LinkDirection = "undirected" | "directed";
+
 export type Link = {
   id: string;
   sourceId: string;
   targetId: string;
+  direction: LinkDirection;
 };
 
 export type GraphNode = {
@@ -24,6 +27,7 @@ export type GraphEdge = {
   id: string;
   source: string;
   target: string;
+  direction: LinkDirection;
 };
 
 export type GraphData = {

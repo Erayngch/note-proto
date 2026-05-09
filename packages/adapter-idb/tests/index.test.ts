@@ -96,7 +96,12 @@ describe("content", () => {
 });
 
 describe("links", () => {
-  const link = (id: string, sourceId: string, targetId: string) => ({ id, sourceId, targetId });
+  const link = (
+    id: string,
+    sourceId: string,
+    targetId: string,
+    direction: "undirected" | "directed" = "undirected",
+  ) => ({ id, sourceId, targetId, direction });
 
   test("insertLink and getAllLinks", async () => {
     await adapter.insertLink(link("l1", "a", "b"));
@@ -105,26 +110,28 @@ describe("links", () => {
     expect(all).toHaveLength(2);
   });
 
-  test("getLinkById", async () => {
-    await adapter.insertLink(link("l1", "a", "b"));
-    expect(await adapter.getLinkById("l1")).toEqual(link("l1", "a", "b"));
+  test("getLinkById preserves direction", async () => {
+    await adapter.insertLink(link("l1", "a", "b", "directed"));
+    expect(await adapter.getLinkById("l1")).toEqual(link("l1", "a", "b", "directed"));
     expect(await adapter.getLinkById("missing")).toBeUndefined();
   });
 
-  test("findLink forward direction", async () => {
+  test("findLinksBetween returns both orderings", async () => {
     await adapter.insertLink(link("l1", "a", "b"));
-    const found = await adapter.findLink("a", "b");
-    expect(found).toEqual(link("l1", "a", "b"));
+    expect(await adapter.findLinksBetween("a", "b")).toEqual([link("l1", "a", "b")]);
+    expect(await adapter.findLinksBetween("b", "a")).toEqual([link("l1", "a", "b")]);
   });
 
-  test("findLink reverse direction", async () => {
-    await adapter.insertLink(link("l1", "a", "b"));
-    const found = await adapter.findLink("b", "a");
-    expect(found).toEqual(link("l1", "a", "b"));
+  test("findLinksBetween returns multiple directed links between same pair", async () => {
+    await adapter.insertLink(link("l1", "a", "b", "directed"));
+    await adapter.insertLink(link("l2", "b", "a", "directed"));
+    const found = await adapter.findLinksBetween("a", "b");
+    expect(found).toHaveLength(2);
+    expect(found.map((l) => l.id).sort()).toEqual(["l1", "l2"]);
   });
 
-  test("findLink returns undefined when not found", async () => {
-    expect(await adapter.findLink("x", "y")).toBeUndefined();
+  test("findLinksBetween returns empty array when not found", async () => {
+    expect(await adapter.findLinksBetween("x", "y")).toEqual([]);
   });
 
   test("deleteLink", async () => {

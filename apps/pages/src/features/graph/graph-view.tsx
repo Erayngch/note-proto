@@ -24,6 +24,7 @@ const CANVAS_HINT_STORAGE_KEY = "graph-canvas-hint-dismissed";
 const ZOOM_MIN = 0.1;
 const ZOOM_MAX = 5;
 const ZOOM_STEP = 1.2;
+const NODE_RADIUS = 20;
 
 type ContextMenu = {
   x: number;
@@ -339,11 +340,24 @@ export const GraphView = () => {
       typeof link.source === "object" ? link.source : nodes.find((n) => n.id === link.source);
     const target =
       typeof link.target === "object" ? link.target : nodes.find((n) => n.id === link.target);
+    const sx = source?.x ?? 0;
+    const sy = source?.y ?? 0;
+    const tx = target?.x ?? 0;
+    const ty = target?.y ?? 0;
+    if (link.direction !== "directed") {
+      return { x1: sx, y1: sy, x2: tx, y2: ty };
+    }
+    // Pull the endpoint back by the node radius so the arrowhead lands on the
+    // circle's edge instead of being swallowed by it.
+    const dx = tx - sx;
+    const dy = ty - sy;
+    const len = Math.hypot(dx, dy) || 1;
+    const offset = NODE_RADIUS + 4;
     return {
-      x1: source?.x ?? 0,
-      y1: source?.y ?? 0,
-      x2: target?.x ?? 0,
-      y2: target?.y ?? 0,
+      x1: sx,
+      y1: sy,
+      x2: tx - (dx / len) * offset,
+      y2: ty - (dy / len) * offset,
     };
   };
 
@@ -358,6 +372,20 @@ export const GraphView = () => {
           onMouseUp={handleMouseUp}
           onMouseLeave={handleMouseUp}
         >
+          <defs>
+            <marker
+              id="graph-arrow"
+              viewBox="0 0 10 10"
+              refX="10"
+              refY="5"
+              markerWidth="6"
+              markerHeight="6"
+              markerUnits="userSpaceOnUse"
+              orient="auto-start-reverse"
+            >
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="#94a3b8" />
+            </marker>
+          </defs>
           <g transform={`translate(${transform.x},${transform.y}) scale(${transform.scale})`}>
             {links.map((link) => {
               const coords = getLinkCoords(link);
@@ -370,6 +398,8 @@ export const GraphView = () => {
                   y2={coords.y2}
                   stroke="#94a3b8"
                   strokeWidth={2}
+                  markerEnd={link.direction === "directed" ? "url(#graph-arrow)" : undefined}
+                  data-direction={link.direction}
                   className="cursor-pointer"
                   onContextMenu={(e) =>
                     handleContextMenu(e, {
@@ -411,7 +441,7 @@ export const GraphView = () => {
                   }
                 }}
               >
-                <circle r={20} fill="#3b82f6" stroke="#1d4ed8" strokeWidth={2} />
+                <circle r={NODE_RADIUS} fill="#3b82f6" stroke="#1d4ed8" strokeWidth={2} />
                 <text
                   dy={-28}
                   textAnchor="middle"
@@ -462,7 +492,11 @@ export const GraphView = () => {
 
         {/* Link Picker */}
         {linkPickerNodeId && (
-          <LinkPicker sourceNodeId={linkPickerNodeId} onClose={() => setLinkPickerNodeId(null)} />
+          <LinkPicker
+            sourceNodeId={linkPickerNodeId}
+            sourceLabel={nodes.find((n) => n.id === linkPickerNodeId)?.label ?? ""}
+            onClose={() => setLinkPickerNodeId(null)}
+          />
         )}
 
         {/* Search Palette (Cmd+K / Ctrl+K) */}

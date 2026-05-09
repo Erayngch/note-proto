@@ -14,6 +14,7 @@ type LinkRow = {
   id: string;
   source_id: string;
   target_id: string;
+  direction: "undirected" | "directed";
 };
 
 const toNote = (row: NoteRow): Note => ({
@@ -27,6 +28,7 @@ const toLink = (row: LinkRow): Link => ({
   id: row.id,
   sourceId: row.source_id,
   targetId: row.target_id,
+  direction: row.direction,
 });
 
 export type SqliteAdapterConfig = {
@@ -55,11 +57,20 @@ export const createSqliteAdapter = (config: SqliteAdapterConfig): StorageAdapter
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS links (
-      id        TEXT PRIMARY KEY,
-      source_id TEXT NOT NULL REFERENCES notes(id) ON DELETE CASCADE,
-      target_id TEXT NOT NULL REFERENCES notes(id) ON DELETE CASCADE,
-      UNIQUE(source_id, target_id)
+      id         TEXT PRIMARY KEY,
+      source_id  TEXT NOT NULL REFERENCES notes(id) ON DELETE CASCADE,
+      target_id  TEXT NOT NULL REFERENCES notes(id) ON DELETE CASCADE,
+      direction  TEXT NOT NULL CHECK (direction IN ('undirected', 'directed')),
+      CHECK (direction = 'directed' OR source_id < target_id)
     )
+  `);
+  db.exec(`
+    CREATE UNIQUE INDEX IF NOT EXISTS links_directed_unique
+      ON links(source_id, target_id) WHERE direction = 'directed'
+  `);
+  db.exec(`
+    CREATE UNIQUE INDEX IF NOT EXISTS links_undirected_unique
+      ON links(source_id, target_id) WHERE direction = 'undirected'
   `);
 
   const notePath = (id: string) => path.join(notesDir, `${id}.md`);
@@ -124,20 +135,21 @@ export const createSqliteAdapter = (config: SqliteAdapterConfig): StorageAdapter
       return row ? toLink(row) : undefined;
     },
 
-    findLink: async (sourceId, targetId) => {
-      const row = db
+    findLinksBetween: async (aId, bId) => {
+      const rows = db
         .prepare(
           "SELECT * FROM links WHERE (source_id = ? AND target_id = ?) OR (source_id = ? AND target_id = ?)",
         )
-        .get(sourceId, targetId, targetId, sourceId) as LinkRow | undefined;
-      return row ? toLink(row) : undefined;
+        .all(aId, bId, bId, aId) as LinkRow[];
+      return rows.map(toLink);
     },
 
     insertLink: async (link) => {
-      db.prepare("INSERT INTO links (id, source_id, target_id) VALUES (?, ?, ?)").run(
+      db.prepare("INSERT INTO links (id, source_id, target_id, direction) VALUES (?, ?, ?, ?)").run(
         link.id,
         link.sourceId,
         link.targetId,
+        link.direction,
       );
     },
 

@@ -35,11 +35,10 @@ const createMemoryAdapter = (): StorageAdapter => {
     },
     getAllLinks: async () => [...links.values()],
     getLinkById: async (id) => links.get(id),
-    findLink: async (sourceId, targetId) =>
-      [...links.values()].find(
+    findLinksBetween: async (aId, bId) =>
+      [...links.values()].filter(
         (l) =>
-          (l.sourceId === sourceId && l.targetId === targetId) ||
-          (l.sourceId === targetId && l.targetId === sourceId),
+          (l.sourceId === aId && l.targetId === bId) || (l.sourceId === bId && l.targetId === aId),
       ),
     insertLink: async (link) => {
       links.set(link.id, link);
@@ -113,5 +112,78 @@ describe("searchNotes", () => {
   test("returns empty when no note matches", async () => {
     await graph.createNote("TODO");
     expect(await graph.searchNotes("xyz-not-present")).toEqual([]);
+  });
+});
+
+describe("createLink (direction)", () => {
+  let graph: ReturnType<typeof createKnowledgeGraph>;
+  let idCounter = 0;
+  let aId: string;
+  let bId: string;
+
+  beforeEach(async () => {
+    idCounter = 0;
+    graph = createKnowledgeGraph({
+      adapter: createMemoryAdapter(),
+      generateId: () => `id-${++idCounter}`,
+      now: () => new Date(2026, 0, idCounter).toISOString(),
+    });
+    const a = await graph.createNote("A");
+    const b = await graph.createNote("B");
+    if (!a.ok || !b.ok) throw new Error("setup failed");
+    aId = a.value.id;
+    bId = b.value.id;
+  });
+
+  test("defaults to undirected", async () => {
+    const link = await graph.createLink(aId, bId);
+    expect(link.ok && link.value.direction).toBe("undirected");
+  });
+
+  test("creates a directed A→B", async () => {
+    const link = await graph.createLink(aId, bId, "directed");
+    expect(link.ok).toBe(true);
+    if (!link.ok) return;
+    expect(link.value.sourceId).toBe(aId);
+    expect(link.value.targetId).toBe(bId);
+    expect(link.value.direction).toBe("directed");
+  });
+
+  test("undirected canonicalizes sourceId < targetId", async () => {
+    const high = aId < bId ? bId : aId;
+    const low = aId < bId ? aId : bId;
+    const link = await graph.createLink(high, low);
+    expect(link.ok).toBe(true);
+    if (!link.ok) return;
+    expect(link.value.sourceId).toBe(low);
+    expect(link.value.targetId).toBe(high);
+  });
+
+  test("A→B and B→A can coexist as separate directed links", async () => {
+    const ab = await graph.createLink(aId, bId, "directed");
+    const ba = await graph.createLink(bId, aId, "directed");
+    expect(ab.ok && ba.ok).toBe(true);
+  });
+
+  test("rejects same-direction duplicate", async () => {
+    await graph.createLink(aId, bId, "directed");
+    const dup = await graph.createLink(aId, bId, "directed");
+    expect(dup).toEqual({ ok: false, error: "DUPLICATE_LINK" });
+  });
+
+  test("rejects undirected when any link already exists", async () => {
+    await graph.createLink(aId, bId, "directed");
+    const dup = await graph.createLink(aId, bId);
+    expect(dup).toEqual({ ok: false, error: "DUPLICATE_LINK" });
+  });
+
+  test("rejects directed when undirected already exists", async () => {
+    await graph.createLink(aId, bId);
+    const dup = await graph.createLink(aId, bId, "directed");
+    expect(dup).toEqual({ ok: false, error: "DUPLICATE_LINK" });
+  });
+
+  test("rejects self link", async () => {
+    expect(await graph.createLink(aId, aId)).toEqual({ ok: false, error: "SELF_LINK" });
   });
 });
