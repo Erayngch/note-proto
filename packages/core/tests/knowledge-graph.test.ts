@@ -11,7 +11,6 @@ const createMemoryAdapter = (): StorageAdapter => {
     getAllNotes: async () =>
       [...notes.values()].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)),
     getNoteById: async (id) => notes.get(id),
-    getNoteByTitle: async (title) => [...notes.values()].find((n) => n.title === title),
     insertNote: async (note) => {
       notes.set(note.id, note);
     },

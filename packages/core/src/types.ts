@@ -33,8 +33,8 @@ export type GraphData = {
 
 export type Result<T, E extends string> = { ok: true; value: T } | { ok: false; error: E };
 
-export type CreateNoteError = "TITLE_REQUIRED" | "TITLE_INVALID" | "TITLE_DUPLICATE";
-export type RenameNoteError = "NOT_FOUND" | "TITLE_REQUIRED" | "TITLE_INVALID" | "TITLE_DUPLICATE";
+export type CreateNoteError = "TITLE_REQUIRED" | "TITLE_INVALID";
+export type RenameNoteError = "NOT_FOUND" | "TITLE_REQUIRED" | "TITLE_INVALID";
 export type CreateLinkError =
   | "SELF_LINK"
   | "SOURCE_NOT_FOUND"

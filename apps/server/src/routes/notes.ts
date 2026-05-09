@@ -23,8 +23,7 @@ notesRouter.post("/", async (c) => {
   const { title } = await c.req.json<{ title: string }>();
   const result = await graph.createNote(title);
   if (!result.ok) {
-    const status = result.error === "TITLE_DUPLICATE" ? 409 : 400;
-    return c.json({ error: result.error }, status);
+    return c.json({ error: result.error }, 400);
   }
   return c.json(result.value, 201);
 });
@@ -33,8 +32,7 @@ notesRouter.patch("/:id", async (c) => {
   const { title } = await c.req.json<{ title: string }>();
   const result = await graph.renameNote(c.req.param("id"), title);
   if (!result.ok) {
-    const status =
-      result.error === "TITLE_DUPLICATE" ? 409 : result.error === "NOT_FOUND" ? 404 : 400;
+    const status = result.error === "NOT_FOUND" ? 404 : 400;
     return c.json({ error: result.error }, status);
   }
   return c.json(result.value);

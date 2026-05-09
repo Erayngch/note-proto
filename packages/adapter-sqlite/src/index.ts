@@ -47,7 +47,7 @@ export const createSqliteAdapter = (config: SqliteAdapterConfig): StorageAdapter
   db.exec(`
     CREATE TABLE IF NOT EXISTS notes (
       id         TEXT PRIMARY KEY,
-      title      TEXT UNIQUE NOT NULL,
+      title      TEXT NOT NULL,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     )
@@ -72,13 +72,6 @@ export const createSqliteAdapter = (config: SqliteAdapterConfig): StorageAdapter
 
     getNoteById: async (id) => {
       const row = db.prepare("SELECT * FROM notes WHERE id = ?").get(id) as NoteRow | undefined;
-      return row ? toNote(row) : undefined;
-    },
-
-    getNoteByTitle: async (title) => {
-      const row = db.prepare("SELECT * FROM notes WHERE title = ?").get(title) as
-        | NoteRow
-        | undefined;
       return row ? toNote(row) : undefined;
     },
 

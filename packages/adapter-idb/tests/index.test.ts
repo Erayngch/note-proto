@@ -49,12 +49,6 @@ describe("notes", () => {
     expect(await adapter.getNoteById("999")).toBeUndefined();
   });
 
-  test("getNoteByTitle", async () => {
-    await adapter.insertNote(note("1", "Hello"));
-    expect(await adapter.getNoteByTitle("Hello")).toEqual(note("1", "Hello"));
-    expect(await adapter.getNoteByTitle("Missing")).toBeUndefined();
-  });
-
   test("updateNote title", async () => {
     await adapter.insertNote(note("1", "Hello"));
     await adapter.updateNote("1", { title: "Updated", updatedAt: "2024-02-01T00:00:00Z" });

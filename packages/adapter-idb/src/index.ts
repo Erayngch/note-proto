@@ -26,7 +26,6 @@ const openDb = (name: string): Promise<IDBDatabase> =>
       const db = request.result;
 
       const notes = db.createObjectStore("notes", { keyPath: "id" });
-      notes.createIndex("title", "title", { unique: true });
       notes.createIndex("updatedAt", "updatedAt", { unique: false });
 
       db.createObjectStore("content", { keyPath: "id" });
@@ -56,11 +55,6 @@ export const createIdbAdapter = async (config?: IdbAdapterConfig): Promise<Stora
 
     getNoteById: async (id) => {
       const row = await req(store("notes", "readonly").get(id));
-      return row as Note | undefined;
-    },
-
-    getNoteByTitle: async (title) => {
-      const row = await req(store("notes", "readonly").index("title").get(title));
       return row as Note | undefined;
     },
 
