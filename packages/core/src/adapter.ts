@@ -4,7 +4,6 @@ export type StorageAdapter = {
   // Notes
   getAllNotes: () => Promise<Note[]>;
   getNoteById: (id: string) => Promise<Note | undefined>;
-  getNoteByTitle: (title: string) => Promise<Note | undefined>;
   insertNote: (note: Note) => Promise<void>;
   updateNote: (id: string, fields: { title?: string; updatedAt: string }) => Promise<void>;
   deleteNote: (id: string) => Promise<void>;

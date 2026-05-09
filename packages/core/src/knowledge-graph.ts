@@ -63,9 +63,6 @@ export const createKnowledgeGraph = (config: KnowledgeGraphConfig): KnowledgeGra
       const titleError = validateTitle(title);
       if (titleError) return { ok: false, error: titleError };
 
-      const existing = await adapter.getNoteByTitle(title);
-      if (existing) return { ok: false, error: "TITLE_DUPLICATE" };
-
       const id = generateId();
       const timestamp = now();
       const note: Note = { id, title, createdAt: timestamp, updatedAt: timestamp };
@@ -82,9 +79,6 @@ export const createKnowledgeGraph = (config: KnowledgeGraphConfig): KnowledgeGra
 
       const note = await adapter.getNoteById(id);
       if (!note) return { ok: false, error: "NOT_FOUND" };
-
-      const conflict = await adapter.getNoteByTitle(title);
-      if (conflict && conflict.id !== id) return { ok: false, error: "TITLE_DUPLICATE" };
 
       const timestamp = now();
       await adapter.updateNote(id, { title, updatedAt: timestamp });
