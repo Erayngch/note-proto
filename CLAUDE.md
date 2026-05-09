@@ -20,7 +20,7 @@
 
 ```bash
 # run lint, fmt and type check for all packages
-vp run check
+vp run checkAll
 ```
 
 それ以外のパッケージ個別のコマンドはパッケージごとの`README.md`を参照
