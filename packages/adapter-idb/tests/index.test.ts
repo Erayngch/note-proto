@@ -134,6 +134,17 @@ describe("links", () => {
     expect(await adapter.findLinksBetween("x", "y")).toEqual([]);
   });
 
+  test("updateLink replaces source/target/direction", async () => {
+    await adapter.insertLink(link("l1", "a", "b", "undirected"));
+    await adapter.updateLink("l1", { sourceId: "b", targetId: "a", direction: "directed" });
+    expect(await adapter.getLinkById("l1")).toEqual(link("l1", "b", "a", "directed"));
+  });
+
+  test("updateLink no-ops on missing id", async () => {
+    await adapter.updateLink("missing", { sourceId: "x", targetId: "y", direction: "directed" });
+    expect(await adapter.getLinkById("missing")).toBeUndefined();
+  });
+
   test("deleteLink", async () => {
     await adapter.insertLink(link("l1", "a", "b"));
     await adapter.deleteLink("l1");

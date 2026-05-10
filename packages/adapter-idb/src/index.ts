@@ -120,6 +120,14 @@ export const createIdbAdapter = async (config?: IdbAdapterConfig): Promise<Stora
       await tx(s.transaction);
     },
 
+    updateLink: async (id, fields) => {
+      const s = store("links", "readwrite");
+      const existing = (await req(s.get(id))) as Link | undefined;
+      if (!existing) return;
+      s.put({ ...existing, ...fields });
+      await tx(s.transaction);
+    },
+
     deleteLink: async (id) => {
       const s = store("links", "readwrite");
       s.delete(id);

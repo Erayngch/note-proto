@@ -10,6 +10,8 @@ export type {
   CreateNoteError,
   RenameNoteError,
   CreateLinkError,
+  EditLinkDirection,
+  EditLinkError,
 } from "./types.js";
 
 export type { StorageAdapter } from "./adapter.js";

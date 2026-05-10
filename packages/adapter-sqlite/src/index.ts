@@ -153,6 +153,15 @@ export const createSqliteAdapter = (config: SqliteAdapterConfig): StorageAdapter
       );
     },
 
+    updateLink: async (id, fields) => {
+      db.prepare("UPDATE links SET source_id = ?, target_id = ?, direction = ? WHERE id = ?").run(
+        fields.sourceId,
+        fields.targetId,
+        fields.direction,
+        id,
+      );
+    },
+
     deleteLink: async (id) => {
       db.prepare("DELETE FROM links WHERE id = ?").run(id);
     },

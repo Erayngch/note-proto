@@ -44,3 +44,11 @@ export type CreateLinkError =
   | "SOURCE_NOT_FOUND"
   | "TARGET_NOT_FOUND"
   | "DUPLICATE_LINK";
+/**
+ * UI-level link direction change.
+ * - "undirected": make undirected (canonicalize sourceId < targetId)
+ * - "forward": directed in current sourceId → targetId orientation
+ * - "backward": directed in flipped (targetId → sourceId) orientation
+ */
+export type EditLinkDirection = "undirected" | "forward" | "backward";
+export type EditLinkError = "NOT_FOUND" | "DUPLICATE_LINK";

@@ -6,6 +6,7 @@ import { useGraph } from "../../lib/graph";
 import { unwrap } from "../../lib/unwrap";
 import { queryKeys } from "../../lib/query";
 import { useDocumentTitle } from "../../lib/use-document-title";
+import type { EditLinkDirection } from "core";
 import { useGraphSimulation, type SimNode, type SimLink } from "./use-graph-simulation";
 import { LinkPicker } from "../../features/link-picker/link-picker";
 import { SearchPalette } from "../../features/search-palette/search-palette";
@@ -187,6 +188,14 @@ export const GraphView = () => {
     },
   });
 
+  const updateLinkDirectionMutation = useMutation({
+    mutationFn: async ({ id, change }: { id: string; change: EditLinkDirection }) =>
+      unwrap(await graph.updateLinkDirection(id, change)),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.graph });
+    },
+  });
+
   const handleNodeClick = (nodeId: string) => {
     if (!dragNode) {
       void navigate(`/notes/${nodeId}`);
@@ -222,6 +231,11 @@ export const GraphView = () => {
 
   const handleDeleteLink = (edgeId: string) => {
     deleteLinkMutation.mutate(edgeId);
+    setContextMenu(null);
+  };
+
+  const handleEditLinkDirection = (edgeId: string, change: EditLinkDirection) => {
+    updateLinkDirectionMutation.mutate({ id: edgeId, change });
     setContextMenu(null);
   };
 
@@ -479,14 +493,72 @@ export const GraphView = () => {
                 </button>
               </>
             )}
-            {contextMenu.type === "edge" && (
-              <button
-                className="w-full text-left px-3 py-1.5 text-sm hover:bg-accent text-destructive"
-                onClick={() => handleDeleteLink(contextMenu.edgeId)}
-              >
-                削除
-              </button>
-            )}
+            {contextMenu.type === "edge" &&
+              (() => {
+                const edge = links.find((l) => l.id === contextMenu.edgeId);
+                if (!edge) return null;
+                const sourceId =
+                  typeof edge.source === "object" ? edge.source.id : (edge.source as string);
+                const targetId =
+                  typeof edge.target === "object" ? edge.target.id : (edge.target as string);
+                const sourceLabel = nodes.find((n) => n.id === sourceId)?.label ?? "";
+                const targetLabel = nodes.find((n) => n.id === targetId)?.label ?? "";
+                const isUndirected = edge.direction === "undirected";
+                const isForward = edge.direction === "directed";
+                const options: { value: EditLinkDirection; label: string; pressed: boolean }[] = [
+                  { value: "undirected", label: "−", pressed: isUndirected },
+                  { value: "forward", label: "→", pressed: isForward },
+                  { value: "backward", label: "←", pressed: false },
+                ];
+                return (
+                  <>
+                    <div className="flex items-center gap-1.5 px-3 py-1.5 text-xs">
+                      <span
+                        className="truncate max-w-[80px]"
+                        title={sourceLabel}
+                        data-testid="edge-menu-source"
+                      >
+                        {sourceLabel}
+                      </span>
+                      <div
+                        role="group"
+                        aria-label="リンクの向き"
+                        className="inline-flex items-center rounded-md border border-border overflow-hidden"
+                      >
+                        {options.map((opt) => (
+                          <button
+                            key={opt.value}
+                            type="button"
+                            aria-pressed={opt.pressed}
+                            data-testid={`edge-direction-${opt.value}`}
+                            onClick={() => handleEditLinkDirection(contextMenu.edgeId, opt.value)}
+                            className={`px-2 py-0.5 leading-none ${
+                              opt.pressed
+                                ? "bg-accent text-accent-foreground"
+                                : "bg-transparent hover:bg-accent/50"
+                            }`}
+                          >
+                            {opt.label}
+                          </button>
+                        ))}
+                      </div>
+                      <span
+                        className="truncate max-w-[80px]"
+                        title={targetLabel}
+                        data-testid="edge-menu-target"
+                      >
+                        {targetLabel}
+                      </span>
+                    </div>
+                    <button
+                      className="w-full text-left px-3 py-1.5 text-sm hover:bg-accent text-destructive"
+                      onClick={() => handleDeleteLink(contextMenu.edgeId)}
+                    >
+                      削除
+                    </button>
+                  </>
+                );
+              })()}
           </div>
         )}
 

@@ -9,6 +9,8 @@ import type {
   CreateNoteError,
   RenameNoteError,
   CreateLinkError,
+  EditLinkDirection,
+  EditLinkError,
 } from "./types.js";
 import { validateTitle } from "./validation.js";
 
@@ -31,6 +33,10 @@ export type KnowledgeGraph = {
     targetId: string,
     direction?: LinkDirection,
   ) => Promise<Result<Link, CreateLinkError>>;
+  updateLinkDirection: (
+    linkId: string,
+    change: EditLinkDirection,
+  ) => Promise<Result<Link, EditLinkError>>;
   deleteLink: (id: string) => Promise<Result<{ ok: true }, "NOT_FOUND">>;
   getGraph: () => Promise<GraphData>;
 };
@@ -146,6 +152,61 @@ export const createKnowledgeGraph = (config: KnowledgeGraphConfig): KnowledgeGra
       await adapter.insertLink(link);
 
       return { ok: true, value: link };
+    },
+
+    updateLinkDirection: async (linkId, change) => {
+      const link = await adapter.getLinkById(linkId);
+      if (!link) return { ok: false, error: "NOT_FOUND" };
+
+      let newSourceId: string;
+      let newTargetId: string;
+      let newDirection: LinkDirection;
+
+      if (change === "undirected") {
+        const lower = link.sourceId < link.targetId ? link.sourceId : link.targetId;
+        const higher = link.sourceId < link.targetId ? link.targetId : link.sourceId;
+        newSourceId = lower;
+        newTargetId = higher;
+        newDirection = "undirected";
+      } else if (change === "forward") {
+        newSourceId = link.sourceId;
+        newTargetId = link.targetId;
+        newDirection = "directed";
+      } else {
+        // backward: flip source/target and store as directed
+        newSourceId = link.targetId;
+        newTargetId = link.sourceId;
+        newDirection = "directed";
+      }
+
+      const unchanged =
+        newSourceId === link.sourceId &&
+        newTargetId === link.targetId &&
+        newDirection === link.direction;
+      if (unchanged) return { ok: true, value: link };
+
+      const between = await adapter.findLinksBetween(newSourceId, newTargetId);
+      const conflict =
+        newDirection === "undirected"
+          ? between.some((l) => l.id !== linkId)
+          : between.some(
+              (l) =>
+                l.id !== linkId &&
+                (l.direction === "undirected" ||
+                  (l.sourceId === newSourceId && l.targetId === newTargetId)),
+            );
+      if (conflict) return { ok: false, error: "DUPLICATE_LINK" };
+
+      await adapter.updateLink(linkId, {
+        sourceId: newSourceId,
+        targetId: newTargetId,
+        direction: newDirection,
+      });
+
+      return {
+        ok: true,
+        value: { ...link, sourceId: newSourceId, targetId: newTargetId, direction: newDirection },
+      };
     },
 
     deleteLink: async (id) => {
