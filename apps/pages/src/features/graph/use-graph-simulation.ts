@@ -8,7 +8,7 @@ import {
   type SimulationNodeDatum,
   type SimulationLinkDatum,
 } from "d3-force";
-import type { GraphData } from "core";
+import type { GraphData, LinkDirection } from "core";
 
 export type SimNode = SimulationNodeDatum & {
   id: string;
@@ -17,6 +17,7 @@ export type SimNode = SimulationNodeDatum & {
 
 export type SimLink = SimulationLinkDatum<SimNode> & {
   id: string;
+  direction: LinkDirection;
 };
 
 export const useGraphSimulation = (
@@ -48,6 +49,7 @@ export const useGraphSimulation = (
         id: e.id,
         source: e.source,
         target: e.target,
+        direction: e.direction,
       }));
 
       const nodesChanged =

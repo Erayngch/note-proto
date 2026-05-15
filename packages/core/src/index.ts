@@ -2,6 +2,7 @@ export type {
   Note,
   NoteWithContent,
   Link,
+  LinkDirection,
   GraphNode,
   GraphEdge,
   GraphData,
@@ -9,6 +10,8 @@ export type {
   CreateNoteError,
   RenameNoteError,
   CreateLinkError,
+  EditLinkDirection,
+  EditLinkError,
 } from "./types.js";
 
 export type { StorageAdapter } from "./adapter.js";

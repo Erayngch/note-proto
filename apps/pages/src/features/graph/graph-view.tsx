@@ -6,6 +6,7 @@ import { useGraph } from "../../lib/graph";
 import { unwrap } from "../../lib/unwrap";
 import { queryKeys } from "../../lib/query";
 import { useDocumentTitle } from "../../lib/use-document-title";
+import type { EditLinkDirection } from "core";
 import { useGraphSimulation, type SimNode, type SimLink } from "./use-graph-simulation";
 import { LinkPicker } from "../../features/link-picker/link-picker";
 import { SearchPalette } from "../../features/search-palette/search-palette";
@@ -24,6 +25,7 @@ const CANVAS_HINT_STORAGE_KEY = "graph-canvas-hint-dismissed";
 const ZOOM_MIN = 0.1;
 const ZOOM_MAX = 5;
 const ZOOM_STEP = 1.2;
+const NODE_RADIUS = 20;
 
 type ContextMenu = {
   x: number;
@@ -186,6 +188,14 @@ export const GraphView = () => {
     },
   });
 
+  const updateLinkDirectionMutation = useMutation({
+    mutationFn: async ({ id, change }: { id: string; change: EditLinkDirection }) =>
+      unwrap(await graph.updateLinkDirection(id, change)),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.graph });
+    },
+  });
+
   const handleNodeClick = (nodeId: string) => {
     if (!dragNode) {
       void navigate(`/notes/${nodeId}`);
@@ -221,6 +231,11 @@ export const GraphView = () => {
 
   const handleDeleteLink = (edgeId: string) => {
     deleteLinkMutation.mutate(edgeId);
+    setContextMenu(null);
+  };
+
+  const handleEditLinkDirection = (edgeId: string, change: EditLinkDirection) => {
+    updateLinkDirectionMutation.mutate({ id: edgeId, change });
     setContextMenu(null);
   };
 
@@ -339,11 +354,24 @@ export const GraphView = () => {
       typeof link.source === "object" ? link.source : nodes.find((n) => n.id === link.source);
     const target =
       typeof link.target === "object" ? link.target : nodes.find((n) => n.id === link.target);
+    const sx = source?.x ?? 0;
+    const sy = source?.y ?? 0;
+    const tx = target?.x ?? 0;
+    const ty = target?.y ?? 0;
+    if (link.direction !== "directed") {
+      return { x1: sx, y1: sy, x2: tx, y2: ty };
+    }
+    // Pull the endpoint back by the node radius so the arrowhead lands on the
+    // circle's edge instead of being swallowed by it.
+    const dx = tx - sx;
+    const dy = ty - sy;
+    const len = Math.hypot(dx, dy) || 1;
+    const offset = NODE_RADIUS + 4;
     return {
-      x1: source?.x ?? 0,
-      y1: source?.y ?? 0,
-      x2: target?.x ?? 0,
-      y2: target?.y ?? 0,
+      x1: sx,
+      y1: sy,
+      x2: tx - (dx / len) * offset,
+      y2: ty - (dy / len) * offset,
     };
   };
 
@@ -358,6 +386,20 @@ export const GraphView = () => {
           onMouseUp={handleMouseUp}
           onMouseLeave={handleMouseUp}
         >
+          <defs>
+            <marker
+              id="graph-arrow"
+              viewBox="0 0 10 10"
+              refX="10"
+              refY="5"
+              markerWidth="6"
+              markerHeight="6"
+              markerUnits="userSpaceOnUse"
+              orient="auto-start-reverse"
+            >
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="#94a3b8" />
+            </marker>
+          </defs>
           <g transform={`translate(${transform.x},${transform.y}) scale(${transform.scale})`}>
             {links.map((link) => {
               const coords = getLinkCoords(link);
@@ -370,6 +412,8 @@ export const GraphView = () => {
                   y2={coords.y2}
                   stroke="#94a3b8"
                   strokeWidth={2}
+                  markerEnd={link.direction === "directed" ? "url(#graph-arrow)" : undefined}
+                  data-direction={link.direction}
                   className="cursor-pointer"
                   onContextMenu={(e) =>
                     handleContextMenu(e, {
@@ -411,7 +455,7 @@ export const GraphView = () => {
                   }
                 }}
               >
-                <circle r={20} fill="#3b82f6" stroke="#1d4ed8" strokeWidth={2} />
+                <circle r={NODE_RADIUS} fill="#3b82f6" stroke="#1d4ed8" strokeWidth={2} />
                 <text
                   dy={-28}
                   textAnchor="middle"
@@ -449,20 +493,82 @@ export const GraphView = () => {
                 </button>
               </>
             )}
-            {contextMenu.type === "edge" && (
-              <button
-                className="w-full text-left px-3 py-1.5 text-sm hover:bg-accent text-destructive"
-                onClick={() => handleDeleteLink(contextMenu.edgeId)}
-              >
-                削除
-              </button>
-            )}
+            {contextMenu.type === "edge" &&
+              (() => {
+                const edge = links.find((l) => l.id === contextMenu.edgeId);
+                if (!edge) return null;
+                const sourceId =
+                  typeof edge.source === "object" ? edge.source.id : (edge.source as string);
+                const targetId =
+                  typeof edge.target === "object" ? edge.target.id : (edge.target as string);
+                const sourceLabel = nodes.find((n) => n.id === sourceId)?.label ?? "";
+                const targetLabel = nodes.find((n) => n.id === targetId)?.label ?? "";
+                const isUndirected = edge.direction === "undirected";
+                const isForward = edge.direction === "directed";
+                const options: { value: EditLinkDirection; label: string; pressed: boolean }[] = [
+                  { value: "undirected", label: "−", pressed: isUndirected },
+                  { value: "forward", label: "→", pressed: isForward },
+                  { value: "backward", label: "←", pressed: false },
+                ];
+                return (
+                  <>
+                    <div className="flex items-center gap-1.5 px-3 py-1.5 text-xs">
+                      <span
+                        className="truncate max-w-[80px]"
+                        title={sourceLabel}
+                        data-testid="edge-menu-source"
+                      >
+                        {sourceLabel}
+                      </span>
+                      <div
+                        role="group"
+                        aria-label="リンクの向き"
+                        className="inline-flex items-center rounded-md border border-border overflow-hidden"
+                      >
+                        {options.map((opt) => (
+                          <button
+                            key={opt.value}
+                            type="button"
+                            aria-pressed={opt.pressed}
+                            data-testid={`edge-direction-${opt.value}`}
+                            onClick={() => handleEditLinkDirection(contextMenu.edgeId, opt.value)}
+                            className={`px-2 py-0.5 leading-none ${
+                              opt.pressed
+                                ? "bg-accent text-accent-foreground"
+                                : "bg-transparent hover:bg-accent/50"
+                            }`}
+                          >
+                            {opt.label}
+                          </button>
+                        ))}
+                      </div>
+                      <span
+                        className="truncate max-w-[80px]"
+                        title={targetLabel}
+                        data-testid="edge-menu-target"
+                      >
+                        {targetLabel}
+                      </span>
+                    </div>
+                    <button
+                      className="w-full text-left px-3 py-1.5 text-sm hover:bg-accent text-destructive"
+                      onClick={() => handleDeleteLink(contextMenu.edgeId)}
+                    >
+                      削除
+                    </button>
+                  </>
+                );
+              })()}
           </div>
         )}
 
         {/* Link Picker */}
         {linkPickerNodeId && (
-          <LinkPicker sourceNodeId={linkPickerNodeId} onClose={() => setLinkPickerNodeId(null)} />
+          <LinkPicker
+            sourceNodeId={linkPickerNodeId}
+            sourceLabel={nodes.find((n) => n.id === linkPickerNodeId)?.label ?? ""}
+            onClose={() => setLinkPickerNodeId(null)}
+          />
         )}
 
         {/* Search Palette (Cmd+K / Ctrl+K) */}

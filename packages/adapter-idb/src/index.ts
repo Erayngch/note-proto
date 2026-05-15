@@ -106,18 +106,25 @@ export const createIdbAdapter = async (config?: IdbAdapterConfig): Promise<Stora
       return row as Link | undefined;
     },
 
-    findLink: async (sourceId, targetId) => {
+    findLinksBetween: async (aId, bId) => {
       const all: Link[] = await req(store("links", "readonly").getAll());
-      return all.find(
+      return all.filter(
         (l) =>
-          (l.sourceId === sourceId && l.targetId === targetId) ||
-          (l.sourceId === targetId && l.targetId === sourceId),
+          (l.sourceId === aId && l.targetId === bId) || (l.sourceId === bId && l.targetId === aId),
       );
     },
 
     insertLink: async (link) => {
       const s = store("links", "readwrite");
       s.add(link);
+      await tx(s.transaction);
+    },
+
+    updateLink: async (id, fields) => {
+      const s = store("links", "readwrite");
+      const existing = (await req(s.get(id))) as Link | undefined;
+      if (!existing) return;
+      s.put({ ...existing, ...fields });
       await tx(s.transaction);
     },
 

@@ -7,13 +7,23 @@ import type { Note } from "core";
 
 type LinkPickerProps = {
   sourceNodeId: string;
+  sourceLabel: string;
   onClose: () => void;
 };
 
-export const LinkPicker = ({ sourceNodeId, onClose }: LinkPickerProps) => {
+type DirectionChoice = "undirected" | "forward" | "backward";
+
+const DIRECTION_OPTIONS: { value: DirectionChoice; label: string; aria: string }[] = [
+  { value: "undirected", label: "−", aria: "無向" },
+  { value: "forward", label: "→", aria: "source から target へ" },
+  { value: "backward", label: "←", aria: "target から source へ" },
+];
+
+export const LinkPicker = ({ sourceNodeId, sourceLabel, onClose }: LinkPickerProps) => {
   const graph = useGraph();
   const [search, setSearch] = useState("");
   const [selectedIndex, setSelectedIndex] = useState(0);
+  const [direction, setDirection] = useState<DirectionChoice>("undirected");
   const inputRef = useRef<HTMLInputElement>(null);
   const queryClient = useQueryClient();
 
@@ -28,8 +38,14 @@ export const LinkPicker = ({ sourceNodeId, onClose }: LinkPickerProps) => {
   const filtered = results.filter((note: Note) => note.id !== sourceNodeId);
 
   const createLinkMutation = useMutation({
-    mutationFn: async ({ targetId }: { targetId: string }) =>
-      unwrap(await graph.createLink(sourceNodeId, targetId)),
+    mutationFn: async ({ targetId }: { targetId: string }) => {
+      // For "backward" we flip source/target so the stored link points target → source.
+      if (direction === "backward") {
+        return unwrap(await graph.createLink(targetId, sourceNodeId, "directed"));
+      }
+      const dir = direction === "forward" ? "directed" : "undirected";
+      return unwrap(await graph.createLink(sourceNodeId, targetId, dir));
+    },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.graph });
       onClose();
@@ -60,9 +76,42 @@ export const LinkPicker = ({ sourceNodeId, onClose }: LinkPickerProps) => {
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center pt-[20vh]" onClick={onClose}>
       <div
-        className="bg-popover border border-border rounded-lg shadow-xl w-[400px] max-w-[90vw]"
+        className="bg-popover border border-border rounded-lg shadow-xl w-[460px] max-w-[90vw]"
         onClick={(e) => e.stopPropagation()}
       >
+        <div className="flex items-center gap-2 px-4 py-3 border-b border-border">
+          <span
+            className="text-sm font-medium truncate max-w-[160px]"
+            title={sourceLabel}
+            data-testid="link-picker-source"
+          >
+            {sourceLabel}
+          </span>
+          <div
+            role="group"
+            aria-label="リンクの向き"
+            className="inline-flex items-center rounded-md border border-border overflow-hidden"
+          >
+            {DIRECTION_OPTIONS.map((opt) => (
+              <button
+                key={opt.value}
+                type="button"
+                aria-label={opt.aria}
+                aria-pressed={direction === opt.value}
+                data-testid={`link-direction-${opt.value}`}
+                onClick={() => setDirection(opt.value)}
+                className={`px-3 py-1 text-sm leading-none ${
+                  direction === opt.value
+                    ? "bg-accent text-accent-foreground"
+                    : "bg-transparent hover:bg-accent/50"
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+          <span className="text-sm text-muted-foreground">target</span>
+        </div>
         <input
           ref={inputRef}
           type="text"

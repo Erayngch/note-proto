@@ -3,11 +3,14 @@ import type {
   Note,
   NoteWithContent,
   Link,
+  LinkDirection,
   GraphData,
   Result,
   CreateNoteError,
   RenameNoteError,
   CreateLinkError,
+  EditLinkDirection,
+  EditLinkError,
 } from "./types.js";
 import { validateTitle } from "./validation.js";
 
@@ -25,7 +28,15 @@ export type KnowledgeGraph = {
   renameNote: (id: string, title: string) => Promise<Result<Note, RenameNoteError>>;
   deleteNote: (id: string) => Promise<Result<{ ok: true }, "NOT_FOUND">>;
   saveContent: (id: string, content: string) => Promise<Result<{ ok: true }, "NOT_FOUND">>;
-  createLink: (sourceId: string, targetId: string) => Promise<Result<Link, CreateLinkError>>;
+  createLink: (
+    sourceId: string,
+    targetId: string,
+    direction?: LinkDirection,
+  ) => Promise<Result<Link, CreateLinkError>>;
+  updateLinkDirection: (
+    linkId: string,
+    change: EditLinkDirection,
+  ) => Promise<Result<Link, EditLinkError>>;
   deleteLink: (id: string) => Promise<Result<{ ok: true }, "NOT_FOUND">>;
   getGraph: () => Promise<GraphData>;
 };
@@ -107,7 +118,7 @@ export const createKnowledgeGraph = (config: KnowledgeGraphConfig): KnowledgeGra
       return { ok: true, value: { ok: true as const } };
     },
 
-    createLink: async (sourceId, targetId) => {
+    createLink: async (sourceId, targetId, direction = "undirected") => {
       if (sourceId === targetId) return { ok: false, error: "SELF_LINK" };
 
       const source = await adapter.getNoteById(sourceId);
@@ -116,14 +127,86 @@ export const createKnowledgeGraph = (config: KnowledgeGraphConfig): KnowledgeGra
       const target = await adapter.getNoteById(targetId);
       if (!target) return { ok: false, error: "TARGET_NOT_FOUND" };
 
-      const existing = await adapter.findLink(sourceId, targetId);
-      if (existing) return { ok: false, error: "DUPLICATE_LINK" };
+      const existing = await adapter.findLinksBetween(sourceId, targetId);
+
+      // Undirected and directed links cannot coexist between the same pair.
+      // For a directed insert, an existing same-direction link is a duplicate.
+      const conflict =
+        direction === "undirected"
+          ? existing.length > 0
+          : existing.some(
+              (l) =>
+                l.direction === "undirected" ||
+                (l.sourceId === sourceId && l.targetId === targetId),
+            );
+      if (conflict) return { ok: false, error: "DUPLICATE_LINK" };
+
+      // Canonicalize undirected links so {a, b} always stores with sourceId < targetId.
+      const [s, t] =
+        direction === "undirected" && sourceId > targetId
+          ? [targetId, sourceId]
+          : [sourceId, targetId];
 
       const id = generateId();
-      const link: Link = { id, sourceId, targetId };
+      const link: Link = { id, sourceId: s, targetId: t, direction };
       await adapter.insertLink(link);
 
       return { ok: true, value: link };
+    },
+
+    updateLinkDirection: async (linkId, change) => {
+      const link = await adapter.getLinkById(linkId);
+      if (!link) return { ok: false, error: "NOT_FOUND" };
+
+      let newSourceId: string;
+      let newTargetId: string;
+      let newDirection: LinkDirection;
+
+      if (change === "undirected") {
+        const lower = link.sourceId < link.targetId ? link.sourceId : link.targetId;
+        const higher = link.sourceId < link.targetId ? link.targetId : link.sourceId;
+        newSourceId = lower;
+        newTargetId = higher;
+        newDirection = "undirected";
+      } else if (change === "forward") {
+        newSourceId = link.sourceId;
+        newTargetId = link.targetId;
+        newDirection = "directed";
+      } else {
+        // backward: flip source/target and store as directed
+        newSourceId = link.targetId;
+        newTargetId = link.sourceId;
+        newDirection = "directed";
+      }
+
+      const unchanged =
+        newSourceId === link.sourceId &&
+        newTargetId === link.targetId &&
+        newDirection === link.direction;
+      if (unchanged) return { ok: true, value: link };
+
+      const between = await adapter.findLinksBetween(newSourceId, newTargetId);
+      const conflict =
+        newDirection === "undirected"
+          ? between.some((l) => l.id !== linkId)
+          : between.some(
+              (l) =>
+                l.id !== linkId &&
+                (l.direction === "undirected" ||
+                  (l.sourceId === newSourceId && l.targetId === newTargetId)),
+            );
+      if (conflict) return { ok: false, error: "DUPLICATE_LINK" };
+
+      await adapter.updateLink(linkId, {
+        sourceId: newSourceId,
+        targetId: newTargetId,
+        direction: newDirection,
+      });
+
+      return {
+        ok: true,
+        value: { ...link, sourceId: newSourceId, targetId: newTargetId, direction: newDirection },
+      };
     },
 
     deleteLink: async (id) => {
@@ -140,7 +223,12 @@ export const createKnowledgeGraph = (config: KnowledgeGraphConfig): KnowledgeGra
 
       return {
         nodes: notes.map((n) => ({ id: n.id, label: n.title })),
-        edges: links.map((l) => ({ id: l.id, source: l.sourceId, target: l.targetId })),
+        edges: links.map((l) => ({
+          id: l.id,
+          source: l.sourceId,
+          target: l.targetId,
+          direction: l.direction,
+        })),
       };
     },
   };

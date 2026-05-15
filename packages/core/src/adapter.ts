@@ -16,8 +16,12 @@ export type StorageAdapter = {
   // Links
   getAllLinks: () => Promise<Link[]>;
   getLinkById: (id: string) => Promise<Link | undefined>;
-  /** Checks both directions: (sourceId, targetId) and (targetId, sourceId) */
-  findLink: (sourceId: string, targetId: string) => Promise<Link | undefined>;
+  /** Returns every link between {aId, bId}, regardless of argument order or direction */
+  findLinksBetween: (aId: string, bId: string) => Promise<Link[]>;
   insertLink: (link: Link) => Promise<void>;
+  updateLink: (
+    id: string,
+    fields: { sourceId: string; targetId: string; direction: Link["direction"] },
+  ) => Promise<void>;
   deleteLink: (id: string) => Promise<void>;
 };
