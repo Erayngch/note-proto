@@ -20,3 +20,12 @@ export { validateTitle } from "./validation.js";
 
 export { createKnowledgeGraph } from "./knowledge-graph.js";
 export type { KnowledgeGraph, KnowledgeGraphConfig } from "./knowledge-graph.js";
+
+export { evaluateSubgraph } from "./subgraph.js";
+export type {
+  TraversalDirection,
+  SubgraphSource,
+  SetOp,
+  SubgraphQuery,
+  SubgraphResult,
+} from "./subgraph.js";

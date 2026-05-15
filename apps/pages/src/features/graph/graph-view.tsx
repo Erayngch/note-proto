@@ -1,7 +1,7 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router";
-import { Plus, ZoomIn, ZoomOut, Maximize2, X } from "lucide-react";
+import { Plus, ZoomIn, ZoomOut, Maximize2, X, Filter } from "lucide-react";
 import { useGraph } from "../../lib/graph";
 import { unwrap } from "../../lib/unwrap";
 import { queryKeys } from "../../lib/query";
@@ -10,6 +10,8 @@ import type { EditLinkDirection } from "core";
 import { useGraphSimulation, type SimNode, type SimLink } from "./use-graph-simulation";
 import { LinkPicker } from "../../features/link-picker/link-picker";
 import { SearchPalette } from "../../features/search-palette/search-palette";
+import { SubgraphPanel } from "../../features/subgraph/subgraph-panel";
+import { useSubgraphQuery } from "../../features/subgraph/use-subgraph-query";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -45,6 +47,9 @@ export const GraphView = () => {
   const [deleteNodeId, setDeleteNodeId] = useState<string | null>(null);
   const [dragNode, setDragNode] = useState<string | null>(null);
   const [searchPaletteOpen, setSearchPaletteOpen] = useState(false);
+  const [subgraphPanelOpen, setSubgraphPanelOpen] = useState(false);
+
+  const subgraph = useSubgraphQuery();
 
   useDocumentTitle(null);
 
@@ -244,6 +249,22 @@ export const GraphView = () => {
     setContextMenu(null);
   };
 
+  const handleSeedFromNode = (nodeId: string) => {
+    const node = nodes.find((n) => n.id === nodeId);
+    const label = node?.label?.trim();
+    if (!label) return;
+    subgraph.seedFromTitle(label);
+    setSubgraphPanelOpen(true);
+    setContextMenu(null);
+  };
+
+  // Subgraph filter state — derived once per render so the link/node loops can branch cheaply.
+  const subgraphActive = subgraph.result !== null;
+  const matchedNodeIds = subgraph.result?.nodeIds;
+  const matchedEdgeIds = subgraph.result?.edgeIds;
+  const isFilterMode = subgraphActive && subgraph.displayMode === "filter";
+  const isHighlightMode = subgraphActive && subgraph.displayMode === "highlight";
+
   const handleWheel = useCallback((e: WheelEvent) => {
     e.preventDefault();
     const delta = e.deltaY > 0 ? 0.9 : 1.1;
@@ -402,7 +423,10 @@ export const GraphView = () => {
           </defs>
           <g transform={`translate(${transform.x},${transform.y}) scale(${transform.scale})`}>
             {links.map((link) => {
+              const matched = !subgraphActive || matchedEdgeIds?.has(link.id) === true;
+              if (isFilterMode && !matched) return null;
               const coords = getLinkCoords(link);
+              const opacity = isHighlightMode && !matched ? 0.15 : 1;
               return (
                 <line
                   key={link.id}
@@ -412,6 +436,7 @@ export const GraphView = () => {
                   y2={coords.y2}
                   stroke="#94a3b8"
                   strokeWidth={2}
+                  opacity={opacity}
                   markerEnd={link.direction === "directed" ? "url(#graph-arrow)" : undefined}
                   data-direction={link.direction}
                   className="cursor-pointer"
@@ -426,47 +451,53 @@ export const GraphView = () => {
                 />
               );
             })}
-            {nodes.map((node) => (
-              <g
-                key={node.id}
-                transform={`translate(${node.x ?? 0},${node.y ?? 0})`}
-                className="cursor-pointer"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleNodeClick(node.id);
-                }}
-                onContextMenu={(e) =>
-                  handleContextMenu(e, {
-                    type: "node",
-                    nodeId: node.id,
-                    x: e.clientX,
-                    y: e.clientY,
-                  })
-                }
-                onMouseDown={(e) => {
-                  if (e.button === 0) {
+            {nodes.map((node) => {
+              const matched = !subgraphActive || matchedNodeIds?.has(node.id) === true;
+              if (isFilterMode && !matched) return null;
+              const opacity = isHighlightMode && !matched ? 0.15 : 1;
+              return (
+                <g
+                  key={node.id}
+                  transform={`translate(${node.x ?? 0},${node.y ?? 0})`}
+                  opacity={opacity}
+                  className="cursor-pointer"
+                  onClick={(e) => {
                     e.stopPropagation();
-                    setDragNode(node.id);
-                    const n = nodesRef.current.find((n) => n.id === node.id);
-                    if (n) {
-                      n.fx = n.x;
-                      n.fy = n.y;
-                    }
+                    handleNodeClick(node.id);
+                  }}
+                  onContextMenu={(e) =>
+                    handleContextMenu(e, {
+                      type: "node",
+                      nodeId: node.id,
+                      x: e.clientX,
+                      y: e.clientY,
+                    })
                   }
-                }}
-              >
-                <circle r={NODE_RADIUS} fill="#3b82f6" stroke="#1d4ed8" strokeWidth={2} />
-                <text
-                  dy={-28}
-                  textAnchor="middle"
-                  fontSize={12}
-                  fill="#1e293b"
-                  className="pointer-events-none select-none"
+                  onMouseDown={(e) => {
+                    if (e.button === 0) {
+                      e.stopPropagation();
+                      setDragNode(node.id);
+                      const n = nodesRef.current.find((n) => n.id === node.id);
+                      if (n) {
+                        n.fx = n.x;
+                        n.fy = n.y;
+                      }
+                    }
+                  }}
                 >
-                  {node.label}
-                </text>
-              </g>
-            ))}
+                  <circle r={NODE_RADIUS} fill="#3b82f6" stroke="#1d4ed8" strokeWidth={2} />
+                  <text
+                    dy={-28}
+                    textAnchor="middle"
+                    fontSize={12}
+                    fill="#1e293b"
+                    className="pointer-events-none select-none"
+                  >
+                    {node.label}
+                  </text>
+                </g>
+              );
+            })}
           </g>
         </svg>
 
@@ -484,6 +515,13 @@ export const GraphView = () => {
                   onClick={() => handleAddLink(contextMenu.nodeId)}
                 >
                   リンクを追加
+                </button>
+                <button
+                  className="w-full text-left px-3 py-1.5 text-sm hover:bg-accent"
+                  onClick={() => handleSeedFromNode(contextMenu.nodeId)}
+                  data-testid="node-menu-seed-subgraph"
+                >
+                  このノートをシードに
                 </button>
                 <button
                   className="w-full text-left px-3 py-1.5 text-sm hover:bg-accent text-destructive"
@@ -574,11 +612,39 @@ export const GraphView = () => {
         {/* Search Palette (Cmd+K / Ctrl+K) */}
         {searchPaletteOpen && <SearchPalette onClose={() => setSearchPaletteOpen(false)} />}
 
+        {/* Subgraph extraction panel */}
+        {subgraphPanelOpen && (
+          <SubgraphPanel
+            query={subgraph.query}
+            result={subgraph.result}
+            displayMode={subgraph.displayMode}
+            updateSource={subgraph.updateSource}
+            addSource={subgraph.addSource}
+            removeSource={subgraph.removeSource}
+            updateOp={subgraph.updateOp}
+            setDisplayMode={subgraph.setDisplayMode}
+            clear={subgraph.clear}
+            onClose={() => setSubgraphPanelOpen(false)}
+          />
+        )}
+
         {/* Zoom / Fit-to-view controls */}
         <div
           className="absolute bottom-6 left-6 z-40 flex flex-col rounded-md border border-border bg-popover shadow-md"
           onClick={(e) => e.stopPropagation()}
         >
+          <button
+            type="button"
+            aria-label="サブグラフ抽出"
+            title="サブグラフ抽出"
+            data-testid="subgraph-open"
+            className={`flex h-9 w-9 items-center justify-center border-b border-border hover:bg-accent ${
+              subgraphActive ? "text-primary" : "text-foreground"
+            }`}
+            onClick={() => setSubgraphPanelOpen((v) => !v)}
+          >
+            <Filter size={16} />
+          </button>
           <button
             type="button"
             aria-label="拡大"
