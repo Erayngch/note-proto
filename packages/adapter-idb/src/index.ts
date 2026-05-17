@@ -74,9 +74,19 @@ export const createIdbAdapter = async (config?: IdbAdapterConfig): Promise<Stora
     },
 
     deleteNote: async (id) => {
-      const s = store("notes", "readwrite");
-      s.delete(id);
-      await tx(s.transaction);
+      // Cascade-delete links referencing this note in the same transaction,
+      // mirroring the SQLite adapter's FK ON DELETE CASCADE.
+      const t = db.transaction(["notes", "links"], "readwrite");
+      const links = t.objectStore("links");
+      const notes = t.objectStore("notes");
+
+      const bySource = await req(links.index("sourceId").getAllKeys(id));
+      for (const key of bySource) links.delete(key);
+      const byTarget = await req(links.index("targetId").getAllKeys(id));
+      for (const key of byTarget) links.delete(key);
+      notes.delete(id);
+
+      await tx(t);
     },
 
     getContent: async (id) => {

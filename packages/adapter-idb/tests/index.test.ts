@@ -70,6 +70,20 @@ describe("notes", () => {
     await adapter.deleteNote("1");
     expect(await adapter.getNoteById("1")).toBeUndefined();
   });
+
+  test("deleteNote cascades to links referencing the note", async () => {
+    await adapter.insertNote(note("1", "A"));
+    await adapter.insertNote(note("2", "B"));
+    await adapter.insertNote(note("3", "C"));
+    await adapter.insertLink({ id: "l1", sourceId: "1", targetId: "2", direction: "undirected" });
+    await adapter.insertLink({ id: "l2", sourceId: "3", targetId: "1", direction: "directed" });
+    await adapter.insertLink({ id: "l3", sourceId: "2", targetId: "3", direction: "directed" });
+
+    await adapter.deleteNote("1");
+
+    const remaining = await adapter.getAllLinks();
+    expect(remaining.map((l) => l.id)).toEqual(["l3"]);
+  });
 });
 
 describe("content", () => {
