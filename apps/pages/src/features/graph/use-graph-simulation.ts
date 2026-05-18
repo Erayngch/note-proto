@@ -2,13 +2,13 @@ import { useRef, useCallback } from "react";
 import {
   forceSimulation,
   forceLink,
-  forceManyBody,
   forceCenter,
   forceCollide,
   type SimulationNodeDatum,
   type SimulationLinkDatum,
 } from "d3-force";
 import type { GraphData, LinkDirection } from "core";
+import { computeAllPairsDistance, desiredDistance } from "./graph-layout";
 
 export type SimNode = SimulationNodeDatum & {
   id: string;
@@ -19,6 +19,22 @@ export type SimLink = SimulationLinkDatum<SimNode> & {
   id: string;
   direction: LinkDirection;
 };
+
+type PairLink = SimulationLinkDatum<SimNode> & {
+  id: string;
+  desired: number;
+};
+
+// Direct neighbors sit about this far apart. Sized so the 12px label above
+// each node has room without overlapping its sibling.
+const MIN_DISTANCE = 100;
+
+// Real edges should win when they fight the virtual all-pairs springs;
+// virtual links use their own (lower) strength.
+const PAIR_STRENGTH = 0.04;
+
+const computeMaxDistance = (width: number, height: number) =>
+  Math.max(Math.min(width, height) / 3, MIN_DISTANCE * 2);
 
 export const useGraphSimulation = (
   width: number,
@@ -52,35 +68,46 @@ export const useGraphSimulation = (
         direction: e.direction,
       }));
 
-      const nodesChanged =
-        newNodes.length !== nodesRef.current.length ||
-        newNodes.some((n) => !oldPositions.has(n.id));
+      const maxDistance = computeMaxDistance(width, height);
+      const distances = computeAllPairsDistance(data);
+
+      const pairLinks: PairLink[] = [];
+      for (let i = 0; i < newNodes.length; i++) {
+        for (let j = i + 1; j < newNodes.length; j++) {
+          const a = newNodes[i]!;
+          const b = newNodes[j]!;
+          const d = distances.get(a.id)?.get(b.id) ?? Infinity;
+          pairLinks.push({
+            id: `${a.id}__${b.id}`,
+            source: a.id,
+            target: b.id,
+            desired: desiredDistance(d, MIN_DISTANCE, maxDistance),
+          });
+        }
+      }
 
       linksRef.current = newLinks;
+      nodesRef.current = newNodes;
 
-      if (nodesChanged || !simRef.current) {
-        nodesRef.current = newNodes;
-        simRef.current?.stop();
-        simRef.current = forceSimulation<SimNode>(newNodes)
-          .force(
-            "link",
-            forceLink<SimNode, SimLink>(newLinks)
-              .id((d) => d.id)
-              .distance(200),
-          )
-          .force("charge", forceManyBody().strength(-500))
-          .force("center", forceCenter(width / 2, height / 2))
-          .force("collide", forceCollide(60))
-          .on("tick", () => onTick([...nodesRef.current], [...linksRef.current]))
-          .on("end", () => onEndRef.current?.([...nodesRef.current]));
-      } else {
-        // Only links changed — update link force and reheat gently
-        const linkForce = simRef.current.force("link") as ReturnType<
-          typeof forceLink<SimNode, SimLink>
-        >;
-        linkForce.links(newLinks);
-        simRef.current.alpha(0.3).restart();
-      }
+      simRef.current?.stop();
+      simRef.current = forceSimulation<SimNode>(newNodes)
+        .force(
+          "link",
+          forceLink<SimNode, SimLink>(newLinks)
+            .id((d) => d.id)
+            .distance(MIN_DISTANCE),
+        )
+        .force(
+          "pair",
+          forceLink<SimNode, PairLink>(pairLinks)
+            .id((d) => d.id)
+            .distance((l) => l.desired)
+            .strength(PAIR_STRENGTH),
+        )
+        .force("collide", forceCollide(60))
+        .force("center", forceCenter(width / 2, height / 2).strength(0.02))
+        .on("tick", () => onTick([...nodesRef.current], [...linksRef.current]))
+        .on("end", () => onEndRef.current?.([...nodesRef.current]));
     },
     [width, height, onTick],
   );
