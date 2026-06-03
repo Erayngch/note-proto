@@ -17,8 +17,7 @@
   ],
   "type": "module",
   "exports": {
-    ".": "./dist/index.mjs",
-    "./package.json": "./package.json"
+    ".": "./dist/index.mjs"
   },
   "publishConfig": {
     "access": "public"

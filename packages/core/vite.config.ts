@@ -20,6 +20,9 @@ export default defineConfig({
         cache: true,
         command: "vp check --fix",
       },
+      pack: {
+        command: "vp pack",
+      },
     },
   },
 });
