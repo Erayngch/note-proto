@@ -63,14 +63,9 @@ export default defineConfig({
         cache: true,
         command: "vp check --fix",
       },
-      _build: {
-        cache: true,
-        dependsOn: ["check"],
+      build: {
+        dependsOn: ["core#pack", "adapter-idb#pack"],
         command: "vp build",
-      },
-      deploy: {
-        dependsOn: ["_build"],
-        command: "vpx wrangler deploy",
       },
     },
   },
